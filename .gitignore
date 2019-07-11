@@ -1,0 +1,4 @@
+data/
+*.Field
+*.pth
+*.pth.tar
