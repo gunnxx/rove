@@ -64,8 +64,7 @@ class DataHandler(object):
         if val_file: self._val_file = val_file
 
         # Construct datafields to be passed to TabularDataset
-        datafields = [('input', self._field),
-                      ('target', self._field)]
+        datafields = [('input', self._field)]
 
         self._datasets = data.TabularDataset.splits(path='',
                                                     train=self._train_file,
