@@ -13,9 +13,11 @@ from model.data_handler import DataHandler
 #from evaluate import evaluate
 
 
+parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', default='./data', help='Directory containing datasets')
 parser.add_argument('--experiment_dir', default='./experiments/base_model', help='Directory containing the experiment setup')
 parser.add_argument('--restore_file', default=None, help='Training checkpoint file name inside experiment_dir (optional)')
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -67,5 +69,4 @@ if __name__ == '__main__':
     model.train()
 
     for batch in train_iter:
-        output = model(batch.input.to(params.device))
-        print(output.shape)
+        output = model(batch.input.to(params.device).float())

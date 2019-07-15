@@ -4,7 +4,7 @@
     "out_embedding_dim": 256,
     "num_layers": 2,
     "bidirectional": true,
-    "context_window": 2,    // predict 2-words before and 2-words after
+    "context_window": 2,
 
     "learning_rate": 1e-3,
     "batch_size": 32,
