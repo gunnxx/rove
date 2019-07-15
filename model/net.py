@@ -42,5 +42,5 @@ def cos_embedding_loss(output, target, neg_samples=False):
         target of shape (seq_len, batch_size, embedding_dim)
     '''
     if neg_samples:
-        return torch.sum(torch.exp(torch.max(0, F.cosine_similarity(output, target, dim=2))))
+        return torch.sum(torch.exp(F.relu(F.cosine_similarity(output, target, dim=2))))
     return torch.sum(torch.exp(1 - F.cosine_similarity(output, target, dim=2)))
