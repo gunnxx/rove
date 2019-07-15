@@ -111,7 +111,7 @@ def bme(arr, vocab):
     nb, ne = 3, 3
     
     for word in arr:
-        word = word[:word.index(1)] if 1 in word else word # remove padding
+        word = word[:word.index(1)] if 1 in word else word # remove auto-padding from data.Field()
         
         B = F.one_hot(torch.tensor(pad(word[:nb], nb, True)), num_classes=len(vocab.itos)).reshape(-1)
         M = F.one_hot(torch.tensor([1] if len(word) is 0 else word), num_classes=len(vocab.itos)).sum(0)

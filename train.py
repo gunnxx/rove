@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import tqdm
+from random import randrange
 
 import torch
 import torch.nn as nn
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     params.train_size = train_size
     params.valid_size = valid_size
     params.vocab_size = len(handler.vocab.itos)
-    params.bme_dim    = len(handler.vocab.itos)*7   # 7 comes from nb=3 + ne=3 + 1
+    params.bme_dim    = params.vocab_size*7   # 7 comes from nb=3 + ne=3 + 1
 
     logging.info("- done.")
 
@@ -68,5 +69,24 @@ if __name__ == '__main__':
     
     model.train()
 
-    for batch in train_iter:
-        output = model(batch.input.to(params.device).float())
+    for i in range(3): # 3 epoch tests
+        print("Epoch {}/3".format(i+1))
+        for batch in train_iter:
+            loss = torch.tensor(0)
+            output = model(batch.input.to(params.device).float())
+
+            # compute loss to minimize distance between center word and
+            # context words based on params.context_window size
+            for i in range(1, params.context_window+1):
+                loss += net.cos_embedding_loss(output[i:, :, :], output[:-i, :, :])
+
+            # negative-samples loss
+            # negative-samples are taken by randomly rolling batch
+            for i in range(params.negative_samples):
+                loss += net.cos_embedding_loss(output, torch.roll(output, randrange(params.batch_size), 1), True)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            print("Batch loss: {}".format(loss.item()))

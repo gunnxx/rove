@@ -5,6 +5,7 @@
     "num_layers": 2,
     "bidirectional": true,
     "context_window": 2,
+    "negative_samples": 3,
 
     "learning_rate": 1e-3,
     "batch_size": 32,
