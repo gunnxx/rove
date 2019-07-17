@@ -29,79 +29,6 @@ def train(model, optimizer, train_iterator, params):
         params: (Params) hyperparameters
     """
 
-    # set model to training mode
-    model.train()
-
-    total_loss = 0.
-    num_steps = params.train_size//params.batch_size
-
-    for batch in tqdm.tqdm(train_iterator, total=num_steps):
-        loss = torch.tensor(0).float()
-        output = model(batch.input.to(params.device).float())
-
-        # compute loss to minimize distance between center word and
-        # context words based on params.context_window size
-        for i in range(1, params.context_window+1):
-            loss += net.cos_embedding_loss(output[i:, :, :], output[:-i, :, :])
-
-        # negative-samples loss
-        # negative-samples are taken by randomly rolling batch
-        for i in range(params.negative_samples):
-            loss += net.cos_embedding_loss(output, torch.roll(output, randrange(params.batch_size), 1), True)
-
-        total_loss += loss.item()
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-    logging.info("- Average training loss: {}".format(total_loss/num_steps))
-
-
-def evaluate(model, optimizer, val_iterator, params):
-    """Evaluate the model on evaluation data
-
-    Args:
-        model: (torch.nn.Module) the neural network
-        optimizer: (torch.optim) optimizer for parameters of model
-        val_iterator: (generator) a generator that generates batches of data and labels
-        params: (Params) hyperparameters
-    """
-    with torch.no_grad():
-        model.eval()
-
-        total_loss = 0.
-        num_steps = params.val_size//params.batch_size
-
-        for batch in tqdm.tqdm(val_iterator, total=num_steps):
-            output = model(batch.input.to(params.device).float())
-
-            # compute loss to minimize distance between center word and
-            # context words based on params.context_window size
-            for i in range(1, params.context_window+1):
-                total_loss += net.cos_embedding_loss(output[i:, :, :], output[:-i, :, :]).item()
-
-            # negative-samples loss
-            # negative-samples are taken by randomly rolling batch
-            for i in range(params.negative_samples):
-                total_loss += net.cos_embedding_loss(output, torch.roll(output, randrange(params.batch_size), 1), True).item()
-
-        logging.info("- Average evaluation loss: {}".format(total_loss/num_steps))
-
-    return {'loss': total_loss/num_epochs}
-
-
-
-def train_and_evaluate(model, optimizer, train_iterator, val_iterator, params):
-    """Train the model and evaluate every epoch
-
-    Args:
-        model: (torch.nn.Module) the neural network
-        optimizer: (torch.optim) optimizer for parameters of model
-        train_iterator: (generator) a generator that generates batches of data and labels
-        val_iterator: (generator) a generator that generates batches of data and labels
-        params: (Params) hyperparameters
-    """
-
     # reload weights from checkpoint if specified
     if args.restore_file:
         restore_path = os.path.join(args.experiment_dir, args.restore_file)
@@ -114,34 +41,68 @@ def train_and_evaluate(model, optimizer, train_iterator, val_iterator, params):
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
-    best_val_loss = float("Inf")
+    # set model to training mode
+    model.train()
 
-    # training on num_epochs
+    # init some necessary variables
+    best_loss   = float(Inf)
+    total_loss  = 0.
+    steps_count = 0
+    num_steps   = params.train_size//params.batch_size
+
+    # train for params.num_epochs
     for epoch in range(params.num_epochs):
-        logging.info("Epoch {}/{}".format(epochs+1, params.num_epochs))
+        logging.info("Epoch {}/{}".format(epoch+1, params.num_epochs))
 
-        # run one epoch
-        train(model, optimizer, train_iterator, params)
-        val_metric = evaluate(model, optimizer, val_iterator, params)
+        for batch in tqdm.tqdm(train_iterator, total=num_steps):
+            loss = torch.tensor(0).to(params.device).float()
+            output = model(batch.input.to(params.device).float())
 
-        # save best model regards on loss
-        if val_metric['loss'] <= best_val_loss:
-            best_val_loss = val_metric['loss']
+            # compute loss to minimize distance between center word and
+            # context words based on params.context_window size
+            for i in range(1, params.context_window+1):
+                loss += net.cos_embedding_loss(output[i:, :, :], output[:-i, :, :])
 
-            path = os.path.join(args.experiment_dir, 'best_loss.pth.tar')
-            torch.save({'epoch': epoch+1,
-                        'model': model.state_dict(),
-                        'optimizer': optimizer.state_dict(),
-                        'loss': val_metric['loss']},
-                        path)
+            # negative-samples loss
+            # negative-samples are taken by randomly rolling batch
+            for i in range(params.negative_samples):
+                loss += net.cos_embedding_loss(output, torch.roll(output, randrange(params.batch_size), 1), True)
 
-        # save latest model
-        path = os.path.join(args.experiment_dir, 'latest.pth.tar')
-        torch.save({'epoch': epoch+1,
-                    'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'loss': val_metric['loss']},
-                    path)
+            steps_count += 1
+            total_loss  += loss.item()
+
+            # save best and latest model for every params.steps_to_save
+            if steps_count%params.steps_to_save == 0:
+                mean_loss = total_loss/params.steps_to_save
+
+                if mean_loss <= best_loss:
+                    best_loss = mean_loss
+
+                    path = os.path.join(args.experiment_dir, 'best_loss.pth.tar')
+                    torch.save({'epoch': epoch+1,
+                                'model': model.state_dict(),
+                                'optimizer': optimizer.state_dict(),
+                                'loss': mean_loss},
+                                path)
+
+
+                path = os.path.join(args.experiment_dir, 'latest.pth.tar')
+                torch.save({'epoch': epoch+1,
+                            'model': model.state_dict(),
+                            'optimizer': optimizer.state_dict(),
+                            'loss': mean_loss},
+                            path)
+
+                logging.info("- Average training loss: {}".format(mean_loss))
+
+                # reset variables
+                steps_count = 0
+                total_loss  = 0
+
+            # backprop
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
 
 if __name__ == '__main__':
@@ -174,11 +135,10 @@ if __name__ == '__main__':
     handler.load_vocab(vocab_path)
     handler.load_dataset(train_file=train_file, val_file=valid_file)
 
-    train_iter, valid_iter = handler.gen_iterator(params.batch_size)
-    train_size, valid_size = handler.data_size
+    train_iter, _ = handler.gen_iterator(params.batch_size)
+    train_size, _ = handler.data_size
 
     params.train_size = train_size
-    params.valid_size = valid_size
     params.vocab_size = len(handler.vocab.itos)
     params.bme_dim    = params.vocab_size*7   # 7 comes from nb=3 + ne=3 + 1
 
@@ -190,5 +150,7 @@ if __name__ == '__main__':
 
     # define optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
-    
-    
+
+    # train the model
+    logging.info("Starting training for {} epochs".format(params.num_epochs))
+    train(model, optimizer, train_iter, params)
